@@ -18,18 +18,3 @@ class ArxivX:
             response = await client.get(self.BASE_URL, params=params)
             response.raise_for_status()
             return feedparser.parse(response.content)['entries']
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

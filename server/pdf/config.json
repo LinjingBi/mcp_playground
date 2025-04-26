@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "arxiv": {
+    "pdf": {
       "command": "<which uv>",
       "args" : [
            "--directory",
-           "<abs_path_to_arxiv_server.py>",
+           "<abs_path_to_pdf.py>",
            "run",
-           "arxiv_server.py"
+           "pdf.py"
         ]
     }
   }
