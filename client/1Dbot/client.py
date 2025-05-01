@@ -1,4 +1,6 @@
-class Client:
+from config import Configuration
+
+class BotClient:
     """
     1. initialize the connection with servers
     2. send the input to LLM
@@ -9,4 +11,15 @@ class Client:
     7. get the final answer from LLM
     """
     def __init__(self):
-        
+        pass
+
+
+
+
+
+
+
+
+
+
+

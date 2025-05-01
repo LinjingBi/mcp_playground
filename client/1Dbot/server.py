@@ -6,6 +6,7 @@ from contextlib import AsyncExitStack
 import asyncio
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.types import ListToolsResult, Tool
 
 from config import ServerConfig
 
@@ -21,10 +22,8 @@ class Server:
     _clean_lock: asyncio.Lock
     exit_stack: AsyncExitStack
 
-
-
-    def __init__(self, name: str, config: ServerConfig) -> None:
-        self._name = name
+    def __init__(self, config: ServerConfig) -> None:
+        self._name = config.name
         self._config = config
         # for context manager clean up 
         self.stdio_context = None
@@ -61,21 +60,30 @@ class Server:
             await self.cleanup()
             raise
     
-    async def list_tools(self):
+    async def list_tools(self) -> list[Tool]:
         if self.session is None:
             raise RuntimeError(f'Server {self.name} not initialized')
-        tools_resp = await self.session.list_tools()
-        logging.info(tools_resp)
-        # TODO return a Tool class, not raw responses
-        return tools_resp
+        tools_resp: ListToolsResult = await self.session.list_tools()
+        tools = []
 
-    # TODO pass Tool class
-    async def call_tool(self, tool):
-        pass
-        
+        for item in tools_resp:
+            if isinstance(item, tuple) and item[0] == 'tools':
+                for tl in item[1]:
+                    tools.append(tl) # tl: mcp.types.Tool
+        return tools
 
-
-
+    async def call_tool(self, name: str, params: dict[str, Any]) -> Any:
+        if self.session is None:
+            raise RuntimeError(f'Server {self.name} not initialized')
+        retr = 3
+        for i in range(retr):
+            try:
+                logging.info(f'Executing tool {name}')
+                response = await self.session.call_tool(name, params)
+                return response
+            except Exception as err:
+                logging.error(f'{i+1} time failed to execute tool {name}, err: {str(err)}')
+        logging.error(f'Failed to execute tool {name} after {retr} retries')
 
     async def cleanup(self):
         async with self._clean_lock:
@@ -85,22 +93,4 @@ class Server:
                 self.stdio_context = None
             except Exception as err:
                 logging.error(f"Failed to cleanup for server, err msg: {str(err)}")
-        
-            
-            
-            
-            
-            
-
-
-
-
-
-
-
-
-
-
-
-
         

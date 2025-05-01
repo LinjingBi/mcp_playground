@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from typing import Optional, Dict, Any, List
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from pydantic import BaseModel
 
 
@@ -13,17 +13,19 @@ logging.basicConfig(
 _SERVER_CONFIG = 'server_config.json'
 
 class ServerConfig(BaseModel):
+    name: str
     command: str
     args: Optional[List[str]] = None
     env: Optional[Dict] = None
 
 
-def load_config() -> ServerConfig:
+def load_config() -> List[ServerConfig] | None:
     if not os.path.isfile(_SERVER_CONFIG):
         logging.warning(f"No server config file found under {_SERVER_CONFIG}.")
         return None
     with open(_SERVER_CONFIG) as f:
-        return ServerConfig(**json.load(f))
+        servers = json.load(f)['mcpServers']
+        return [ServerConfig(name=key, **value) for key, value in servers.items()]
 
 
 # class ServerConfig():

@@ -1,20 +1,11 @@
-"""
-1. start with input()
-2. prompt to LLM has 4 parts:
-    - context
-    - tool description
-    - question
-    - tool response(if any)
-3. if LLM needs tool, should return a json strictly following the format:
-    {tools: [{"name": "tool_name", "input": "input_json"}]}
+import os
 
-4. if no tool needed, just return a json with:
-    {"answer": "answer", "context": "a short summary of previous context and new answer"}
+from config import load_config
+from server import Server
+from llmx import LLMx
 
-
-input -> client -> LLM -> client -> (server -> client -> LLM -> client) -> output
-"""
-
-
-
-
+def main():
+    server_configs = load_config()
+    servers = [Server(config) for config in server_configs]
+    llm_apikey = os.environ['LLM_API_KEY']
+    llm = LLMx(llm_apikey)
