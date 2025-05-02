@@ -1,5 +1,4 @@
 from typing import Any
-import os
 import logging
 from contextlib import AsyncExitStack
 
@@ -8,14 +7,15 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import ListToolsResult, Tool
 
-from config import ServerConfig
+from .config import ServerConfig
 
 logging.basicConfig(
         level=logging.INFO, format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s"
 )
 
 class Server:
-    _name: str
+    """Interface to interact with MCP servers"""
+    name: str
     _config: ServerConfig
     stdio_context: Any | None = None
     session: ClientSession | None = None
@@ -23,7 +23,7 @@ class Server:
     exit_stack: AsyncExitStack
 
     def __init__(self, config: ServerConfig) -> None:
-        self._name = config.name
+        self.name = config.name
         self._config = config
         # for context manager clean up 
         self.stdio_context = None
@@ -32,7 +32,7 @@ class Server:
         self._clean_lock = asyncio.Lock()
         self.exit_stack = AsyncExitStack()
     
-    async def initialize(self):
+    async def initialize(self) -> str:
         """
         1. spawn server process
         2. hand out server's read and write as a context manager
@@ -56,11 +56,11 @@ class Server:
             await session.initialize()
             self.session = session
         except Exception as err:
-            logging.error(str(err))
+            logging.error(f"Server {self.name} initialization failed, error {str(err)}")
             await self.cleanup()
             raise
     
-    async def list_tools(self) -> list[Tool]:
+    async def list_tools(self) -> list[Tool | None]:
         if self.session is None:
             raise RuntimeError(f'Server {self.name} not initialized')
         tools_resp: ListToolsResult = await self.session.list_tools()
@@ -75,15 +75,16 @@ class Server:
     async def call_tool(self, name: str, params: dict[str, Any]) -> Any:
         if self.session is None:
             raise RuntimeError(f'Server {self.name} not initialized')
-        retr = 3
-        for i in range(retr):
+        retry = 3
+        for i in range(retry):
             try:
                 logging.info(f'Executing tool {name}')
                 response = await self.session.call_tool(name, params)
                 return response
             except Exception as err:
                 logging.error(f'{i+1} time failed to execute tool {name}, err: {str(err)}')
-        logging.error(f'Failed to execute tool {name} after {retr} retries')
+                asyncio.sleep(1)
+        logging.error(f'Failed to execute tool {name} after {retry} retries')
 
     async def cleanup(self):
         async with self._clean_lock:
@@ -92,5 +93,5 @@ class Server:
                 self.session = None
                 self.stdio_context = None
             except Exception as err:
-                logging.error(f"Failed to cleanup for server, err msg: {str(err)}")
+                logging.error(f"Failed to cleanup for server {self.name}, err msg: {str(err)}")
         

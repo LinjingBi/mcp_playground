@@ -1,8 +1,8 @@
 import logging
-import asyncio
 from typing import List
 
 import httpx
+import asyncio
 
 
 logging.basicConfig(
@@ -22,13 +22,18 @@ class LLMx:
             headers=self._request_header,
             timeout=30.0
         )
+    
+    async def cleanup(self):
+        if not self.client.is_closed:
+            await self.client.aclose()
+
     async def __aenter__(self):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
             logging.error(f"An error occurred in llmx exit: {exc_val}")  
-        await self.client.aclose()
+        await self.cleanup()
 
     async def chat(self, messages: List[dict]) -> str:
 
@@ -44,20 +49,23 @@ class LLMx:
             "stop": None,
         }
         retry = 3
-        try:
-            for i in range(retry):
+        for i in range(retry):
+            try:
                 response = await self.client.post(self.CHAT_URL, json=payload)
                 response.raise_for_status()
                 data = response.json()
                 return data['choice'][0]['message']['content']
-        except httpx.HTTPError as err:
-            logging.error(f'{i+1} time request to LLM chat failed, error {str(err)}')
-            if isinstance(err, httpx.HTTPStatusError):
-                status_code = err.response.status_code
-                logging.debug(f"Status code: {status_code}")
-                logging.debug(f"Response details: {err.response.text}")
-            
-            asyncio.sleep(1)
+            except httpx.HTTPError as err:
+                logging.error(f'{i+1} time request to LLM chat failed, error {str(err)}')
+                if isinstance(err, httpx.HTTPStatusError):
+                    status_code = err.response.status_code
+                    logging.debug(f"Status code: {status_code}")
+                    logging.debug(f"Response details: {err.response.text}")
+                
+                asyncio.sleep(1)
+            except Exception as err:
+                logging.error(f'Exception occured when chatting with LLM {str(err)}')
+                break
         
         return (f"I encountered an error, please check system log for more details. "
                 "Please try again or rephrase your request.")
