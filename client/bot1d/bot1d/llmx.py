@@ -38,7 +38,8 @@ class LLMx:
     async def chat(self, messages: List[dict]) -> str:
 
         payload = {
-            "model": "qwen-qwq-32b",
+            # "model": "qwen-qwq-32b",
+            "model": 'llama-3.1-8b-instant',
             "messages": messages,
             # What sampling temperature to use, between 0 and 2. 
             # Higher values like 0.8 will make the output more random, 
@@ -54,7 +55,7 @@ class LLMx:
                 response = await self.client.post(self.CHAT_URL, json=payload)
                 response.raise_for_status()
                 data = response.json()
-                return data['choice'][0]['message']['content']
+                return data['choices'][0]['message']['content']
             except httpx.HTTPError as err:
                 logging.error(f'{i+1} time request to LLM chat failed, error {str(err)}')
                 if isinstance(err, httpx.HTTPStatusError):

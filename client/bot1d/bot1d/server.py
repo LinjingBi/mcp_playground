@@ -7,7 +7,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import ListToolsResult, Tool
 
-from .config import ServerConfig
+from bot1d.config import ServerConfig
 
 logging.basicConfig(
         level=logging.INFO, format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s"

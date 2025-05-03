@@ -1,12 +1,12 @@
 import json
 import logging
+from typing import Any
 
-import asyncio
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
-from .llmx import LLMx
-from .server import Server
-from .config import format_tool_description
+from bot1d.llmx import LLMx
+from bot1d.server import Server
+from bot1d.config import format_tool_description
 logging.basicConfig(
         level=logging.INFO, format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s"
 )
@@ -14,7 +14,7 @@ logging.basicConfig(
 class LLMTool(BaseModel):
     server: str
     tool: str
-    arguments = ConfigDict(extra="allow")
+    arguments: dict[str, Any] | None
 
 class BotClient:
     """
@@ -32,19 +32,19 @@ class BotClient:
         self.tools_description = ''
         self._initialized = False
         self._prompt2llm = (
-                "You are a helpful assistant with access to these tools:\n\n"
+                "You are a helpful assistant with access to these extra tools:\n\n"
                 "{tools_description}\n"
                 "Choose the appropriate tool based on the user's question. "
                 "If no tool is needed, reply directly.\n\n"
                 "IMPORTANT: When you need to use tools, you must ONLY respond with "
                 "the exact JSON object format below, nothing else:\n"
-                '{"mcptools":[{\n'
+                '{{"mcptools":[{{\n'
                 '    "server": "server-name",\n'
                 '    "tool": "tool-name",\n'
-                '    "arguments": {\n'
+                '    "arguments": {{\n'
                 '        "argument-name": "value"\n'
-                "    }\n"
-                "}]}\n\n"
+                "    }}\n"
+                "}}]}}\n\n"
                 "After receiving a tool's response:\n"
                 "1. Transform the raw data into a natural, conversational response\n"
                 "2. Keep responses concise but informative\n"
@@ -54,14 +54,10 @@ class BotClient:
                 "Please use only the tools that are explicitly defined above."
             )
     async def cleanup(self):
-        cleanup_tasks = [
-            asyncio.create_task(self.llm.cleanup())
-        ]
-        cleanup_tasks.extend(
-            [asyncio.create_task(server.cleanup() for server in self.servers.values())]
-        )
         try:
-            await asyncio.gather(*cleanup_tasks, return_exceptions=True)
+            await self.llm.cleanup()
+            for server in self.servers.values():
+                await server.cleanup()
         except Exception as err:
             logging.warning(f"Warning during final cleanup: {err}")
 
@@ -72,7 +68,8 @@ class BotClient:
             tools = await server.list_tools()
             descrip = format_tool_description(server.name, tools)
             self.tools_description += descrip + '\n'
-        self._prompt2llm.format(tools_description=self.tools_description)
+        self._prompt2llm = self._prompt2llm.format(
+            tools_description=self.tools_description if self.tools_description else 'No Tool Available.')
         self._initialized = True
 
     async def handle_llm_response(self, rsp: str) -> str:
@@ -93,7 +90,7 @@ class BotClient:
             return str(results)
         else:
             return rsp
-
+    
     async def talk(self):
         try:
             if not self._initialized:
@@ -103,6 +100,7 @@ class BotClient:
                 'role': "system",
                 'content': self._prompt2llm
             }]
+            logging.info(f'\nsystem: {self._prompt2llm}')
 
             while True:
                 try:
@@ -110,26 +108,26 @@ class BotClient:
                     if new_msg.lower() in ["quit", "exit"]:
                         logging.info("\nExiting...")
                         break
-
                     messages.append({
                         'role': 'user',
                         'content': new_msg
                     })
                     
                     llm_answer = await self.llm.chat(messages)
+                    logging.info(f'\nassistant: {llm_answer}')
                     messages.append({
                             'role': 'assistant',
                             'content': llm_answer,
                         })
-                    processed_llm_answer = self.handle_llm_response(llm_answer)
-                    if llm_answer == processed_llm_answer:
-                        logging.info(f'\nassistant: {llm_answer}')
-                    else:
-                        logging.debug(f'\nassistant[tool]: {llm_answer}')
+                    
+                    processed_llm_answer = await self.handle_llm_response(llm_answer)
+                    if llm_answer != processed_llm_answer:
+                        logging.info(f'\nsystem: {processed_llm_answer}')
                         messages.append({
                             'role': 'system',
                             'content': processed_llm_answer,
                         })
+                        
                         final_llm_answer = await self.llm.chat(messages)
                         logging.info(f'\nassistant: {final_llm_answer}')
                         messages.append({
