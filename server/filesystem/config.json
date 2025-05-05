@@ -1,0 +1,13 @@
+{
+    "mcpServers": {
+      "self-filesystem": {
+        "command": "<which uv>",
+        "args" : [
+             "--directory",
+             "<path_to_to_local.py>",
+             "run",
+             "to_local.py"
+          ]
+      }
+    }
+  }
