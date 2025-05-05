@@ -1,15 +1,17 @@
 import json
 import logging
 from typing import Any
+import os
 
 from pydantic import BaseModel
 
 from bot1d.llmx import LLMx
 from bot1d.server import Server
-from bot1d.config import format_tool_description
+from bot1d.config import format_tool_description, SHORT_MEMORY_DIR
 logging.basicConfig(
         level=logging.INFO, format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s"
 )
+
 
 class LLMTool(BaseModel):
     server: str
@@ -91,11 +93,58 @@ class BotClient:
         else:
             return rsp
     
+    def load_short_memory(self) -> str | None:
+        """
+        List all conversation summary files in the short memory directory,
+        sorted by modification time (newest first).
+        Display file contents in groups of 5 files.
+        """
+        try:
+            if not os.path.exists(SHORT_MEMORY_DIR):
+                logging.info("No short memory directory found.")
+                return
+            
+            files = os.listdir(SHORT_MEMORY_DIR)
+            if not files:
+                logging.info("No conversation summaries found.")
+                return
+                
+            files.sort(key=lambda x: os.path.getmtime(os.path.join(SHORT_MEMORY_DIR, x)), reverse=True)
+            
+            for i in range(0, len(files), 5):
+                group = files[i:i+5]
+                logging.info(f"\n=== Group {i//5 + 1} of {(len(files)-1)//5 + 1} ===")
+                file_dict = {}
+                for index, file in enumerate(group):
+                    try:
+                        with open(os.path.join(SHORT_MEMORY_DIR, file), 'r') as f:
+                            content = f.read()
+                            file_dict[str(index)] = content
+                            logging.info(f"\n{index}. {content}")
+                    except Exception as e:
+                        logging.error(f"Error reading file {file}: {e}")
+                
+
+                response = input("\nEnter number to select. Press Enter to see more files, or 'q' to quit: ").strip().lower()
+                if response in file_dict:
+                    return file_dict[response]
+                elif response == 'q':
+                    return None
+                    
+        except Exception as e:
+            logging.error(f"Error loading short memory: {e}")
+    
     async def talk(self):
         try:
             if not self._initialized:
                 raise RuntimeError('Call initialize() first.')
-
+            
+            load_smemo = input("\nNeed recap?[yn]")
+            if load_smemo.lower() == 'y':
+                recap = self.load_short_memory()
+                if recap:
+                    self._prompt2llm + f"\n\nRecap: {recap}"
+                
             messages = [{
                 'role': "system",
                 'content': self._prompt2llm
@@ -110,7 +159,7 @@ class BotClient:
                         break
                     messages.append({
                         'role': 'user',
-                        'content': new_msg
+                        'content': new_msg,
                     })
                     
                     llm_answer = await self.llm.chat(messages)
@@ -135,7 +184,7 @@ class BotClient:
                             'content': final_llm_answer,
                         })
                 except KeyboardInterrupt:
-                    logging.info('exiting...')
+                    logging.info('\nExiting...')
                     break
         finally:
             await self.cleanup()

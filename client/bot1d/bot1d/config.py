@@ -12,6 +12,7 @@ logging.basicConfig(
 )
 
 _SERVER_CONFIG = 'server_config.json'
+SHORT_MEMORY_DIR = os.path.join(os.environ['HOME'], '.bot1d', 'storage', 'short-memory')
 
 class ServerConfig(BaseModel):
     name: str
