@@ -32,7 +32,7 @@ def load_config() -> List[ServerConfig | None]:
 def format_tool_description(server_name: str, tools: list[Tool | None]) -> str:
     result = ''
     for tool in tools:
-        name = tool.name
+        tool_name = tool.name
         descrip = tool.description
         params = ''
         for name, values in tool.inputSchema.get('properties', {}).items():
@@ -44,7 +44,7 @@ def format_tool_description(server_name: str, tools: list[Tool | None]) -> str:
         
         text = f"""
         Server: {server_name}\n
-        Tool: {name}\n
+        Tool: {tool_name}\n
         Description: {descrip}\n
         Params: {params}
         """

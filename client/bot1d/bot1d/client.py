@@ -4,10 +4,35 @@ from typing import Any
 import os
 
 from pydantic import BaseModel
+from mcp.types import CallToolResult
 
 from bot1d.llmx import LLMx
 from bot1d.server import Server
 from bot1d.config import format_tool_description, SHORT_MEMORY_DIR
+
+def export_env_from_file(file_path: str) -> dict[str, str]:
+    """
+    Export environment variables from a file.
+    The file should be in format: KEY=VALUE (one per line)
+    Args:
+        file_path: Path to the environment file
+    Returns:
+        Dictionary of environment variables
+    """
+    env_vars = {}
+    try:
+        with open(file_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    key, value = line.split('=', 1)
+                    env_vars[key.strip()] = value.strip()
+                    os.environ[key.strip()] = value.strip()
+        return env_vars
+    except Exception as e:
+        logging.error(f"Error loading environment variables: {e}")
+        return {}
+
 logging.basicConfig(
         level=logging.INFO, format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s"
 )
@@ -38,8 +63,8 @@ class BotClient:
                 "{tools_description}\n"
                 "Choose the appropriate tool based on the user's question. "
                 "If no tool is needed, reply directly.\n\n"
-                "IMPORTANT: When you need to use tools, you must ONLY respond with "
-                "the exact JSON object format below, nothing else:\n"
+                "IMPORTANT: When you need to use tools, you MUST ONLY respond with "
+                "the exact JSON object format below. NO EXTRA TEXT BUT ONLY THE JSON OBJECT:\n"
                 '{{"mcptools":[{{\n'
                 '    "server": "server-name",\n'
                 '    "tool": "tool-name",\n'
@@ -77,20 +102,25 @@ class BotClient:
     async def handle_llm_response(self, rsp: str) -> str:
         try:
             rsp_json = json.loads(rsp)
+            logging.info(type(rsp_json))
+            logging.info(rsp_json)
         except json.JSONDecodeError:
+            logging.info('Not a JSON LLM response.')
             return rsp
         
         results = {}
         if 'mcptools' in rsp_json:
+            logging.info('Calling tools for more info...')
             for tool in rsp_json['mcptools']:
                 llm_tool = LLMTool(**tool)
                 if llm_tool.server not in self.servers:
                     raise ValueError(f'LLM requested an unknown server: {llm_tool.server}. Availables: {self.servers.keys()}')
                 mcp_server = self.servers[llm_tool.server]
-                tool_rsp = await mcp_server.call_tool(llm_tool.tool, llm_tool.arguments)
-                results[llm_tool.server] = tool_rsp
+                tool_rsp: CallToolResult = await mcp_server.call_tool(llm_tool.tool, llm_tool.arguments)
+                results[llm_tool.server] = tool_rsp.content[0].text
             return str(results)
         else:
+            logging.info('Not a tool calling LLM response')
             return rsp
     
     def load_short_memory(self) -> str | None:
@@ -99,51 +129,52 @@ class BotClient:
         sorted by modification time (newest first).
         Display file contents in groups of 5 files.
         """
-        try:
-            if not os.path.exists(SHORT_MEMORY_DIR):
-                logging.info("No short memory directory found.")
-                return
-            
-            files = os.listdir(SHORT_MEMORY_DIR)
-            if not files:
-                logging.info("No conversation summaries found.")
-                return
+        if not os.path.exists(SHORT_MEMORY_DIR):
+            # logging.info("No short memory directory found.")
+            return
+        
+        files = os.listdir(SHORT_MEMORY_DIR)
+        if not files:
+            # logging.info("No conversation summaries found.")
+            return
+        
+        load_smemo = input("\nNeed recap?[yn]")
+        if load_smemo.lower() == 'y':
+            try:
+                files.sort(key=lambda x: os.path.getmtime(os.path.join(SHORT_MEMORY_DIR, x)), reverse=True)
                 
-            files.sort(key=lambda x: os.path.getmtime(os.path.join(SHORT_MEMORY_DIR, x)), reverse=True)
-            
-            for i in range(0, len(files), 5):
-                group = files[i:i+5]
-                logging.info(f"\n=== Group {i//5 + 1} of {(len(files)-1)//5 + 1} ===")
-                file_dict = {}
-                for index, file in enumerate(group):
-                    try:
-                        with open(os.path.join(SHORT_MEMORY_DIR, file), 'r') as f:
-                            content = f.read()
-                            file_dict[str(index)] = content
-                            logging.info(f"\n{index}. {content}")
-                    except Exception as e:
-                        logging.error(f"Error reading file {file}: {e}")
-                
-
-                response = input("\nEnter number to select. Press Enter to see more files, or 'q' to quit: ").strip().lower()
-                if response in file_dict:
-                    return file_dict[response]
-                elif response == 'q':
-                    return None
+                for i in range(0, len(files), 5):
+                    group = files[i:i+5]
+                    logging.info(f"\n=== Group {i//5 + 1} of {(len(files)-1)//5 + 1} ===")
+                    file_dict = {}
+                    for index, file in enumerate(group):
+                        try:
+                            with open(os.path.join(SHORT_MEMORY_DIR, file), 'r') as f:
+                                content = f.read()
+                                file_dict[str(index)] = content
+                                logging.info(f"\n{index}. {content}")
+                        except Exception as e:
+                            logging.error(f"Error reading file {file}: {e}")
                     
-        except Exception as e:
-            logging.error(f"Error loading short memory: {e}")
+
+                    response = input("\nEnter number to select. Press Enter to see more files, or 'q' to quit: ").strip().lower()
+                    if response in file_dict:
+                        return file_dict[response]
+                    elif response == 'q':
+                        return None
+                        
+            except Exception as e:
+                logging.error(f"Error loading short memory: {e}")
     
     async def talk(self):
         try:
             if not self._initialized:
                 raise RuntimeError('Call initialize() first.')
             
-            load_smemo = input("\nNeed recap?[yn]")
-            if load_smemo.lower() == 'y':
-                recap = self.load_short_memory()
-                if recap:
-                    self._prompt2llm + f"\n\nRecap: {recap}"
+            
+            recap = self.load_short_memory()
+            if recap:
+                self._prompt2llm += f"\n\nRecap: {recap}"
                 
             messages = [{
                 'role': "system",

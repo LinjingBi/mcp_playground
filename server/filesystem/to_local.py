@@ -1,7 +1,7 @@
 import time
 import os
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 
 storage_dir = os.path.join(os.environ['HOME'], '.bot1d', 'storage')
 short_memory_dir = os.path.join(storage_dir, 'short-memory')
@@ -36,7 +36,7 @@ def list_directory(directory: str) -> list:
 
 
 @mcp.tool()
-async def save_short_memory(memory: str) -> str:
+async def save_short_memory(memory: str, ctx: Context) -> str:
     """
     Save a concise storyline/thought-of-chain of the current conversation to a local file.
     The summary should be condensed to less than 500 words before saving.
@@ -46,19 +46,28 @@ async def save_short_memory(memory: str) -> str:
     Returns:
         The filename where the summary was saved
     """
-    return write_to_file(memory, short_memory_dir)
+    try:
+        file_path = write_to_file(memory, short_memory_dir)
+        return f'Successfully saved short memory to file: {file_path}'
+    except Exception as err:
+        ctx.info(err)
+        return f'Failed to create short memory: {err}'
 
 @mcp.tool()
-async def delete_short_memory(file_name: str) -> None:
+async def delete_short_memory(file_name: str) -> str:
     """
     Delete a short memory file. Only files under short memory path are allowed.
     Args:
       file_name: short memory filename.
     """
-    full_path = os.path.join(short_memory_dir, file_name)
-    if not os.path.isfile(full_path):
-        raise ValueError('Filename does not exist under short memory directoy.')
-    os.remove(full_path)
+    try:
+        full_path = os.path.join(short_memory_dir, file_name)
+        if not os.path.isfile(full_path):
+            return f'File {full_path} does not exist under short memory directoy.'
+        os.remove(full_path)
+        return f'File {full_path} deleted.'
+    except Exception as err:
+        return f'Failed to delete file {full_path}, error: {err}.'
 
 
 # don't want to send LLM too many info, changed this part to pure logic in MCP client.

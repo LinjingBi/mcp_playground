@@ -89,7 +89,13 @@ class Server:
     async def cleanup(self):
         async with self._clean_lock:
             try:
-                await self.exit_stack.aclose()
+                if self.exit_stack:
+                    try:
+                        await self.exit_stack.aclose()
+                    except asyncio.CancelledError:
+                        logging.warning(f"Cleanup cancelled for server {self.name}")
+                    except Exception as err:
+                        logging.error(f"Failed to cleanup for server {self.name}, err msg: {str(err)}")
                 self.session = None
                 self.stdio_context = None
             except Exception as err:
