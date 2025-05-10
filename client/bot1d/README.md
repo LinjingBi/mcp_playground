@@ -1,4 +1,4 @@
-# 1Dbot v1 – a chatbot that lives in the terminal :)  
+# 1Dbot(v1) – a chatbot that lives in the terminal :)  
 
 ### Highly inspired by the simple-chatbot from MCP python-sdk.
 
@@ -13,18 +13,19 @@
 ## How to
 ### Install
 
-#### Prerequisite
-- python >=3.11
-- uv
-- edit server_config.json for MCP servers
+- Prerequisite
+    - python >=3.11
+    - uv
+    - edit server_config.json for MCP servers
 
-#### Cmd
+- Cmd
 ```shell
 uv venv && source .venv/bin/activate && uv pip install -e .
 ```
 
 ### Run
 ```shell
+source .venv/bin/activate
 python main.py
 ```
 
